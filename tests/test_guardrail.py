@@ -225,3 +225,24 @@ def test_client_tier2_sends_api_key_header(mget):
     mget.return_value = FakeResponse(200, {"trust_score": 70, "withheld": False})
     TrustClient(api_key="mt_test").get_trust_score(DID)
     assert mget.call_args.kwargs["headers"]["X-API-Key"] == "mt_test"
+
+
+# -- branded User-Agent header (0.1.2) ------------------------------------
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_sends_branded_user_agent_keyless(mget, monkeypatch):
+    monkeypatch.delenv("MOLTRUST_API_KEY", raising=False)
+    mget.return_value = FakeResponse(200, {"trust_score": 70, "withheld": False})
+    TrustClient().get_trust_score(DID)
+    from moltrust_crewai import __version__
+    assert mget.call_args.kwargs["headers"]["User-Agent"] == f"moltrust-crewai/{__version__}"
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_sends_branded_user_agent_with_key(mget):
+    mget.return_value = FakeResponse(200, {"trust_score": 70, "withheld": False})
+    TrustClient(api_key="mt_test").get_trust_score(DID)
+    from moltrust_crewai import __version__
+    h = mget.call_args.kwargs["headers"]
+    assert h["User-Agent"] == f"moltrust-crewai/{__version__}"
+    assert h["X-API-Key"] == "mt_test"

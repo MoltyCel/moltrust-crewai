@@ -7,6 +7,8 @@ Add MolTrust trust checks to any CrewAI crew via CrewAI's hook system::
     MolTrustGuardrail(min_score=60).install()
 """
 
+__version__ = "0.1.2"
+
 from .guardrail import MolTrustGuardrail
 from .exceptions import (
     MolTrustCrewAIError,
@@ -14,7 +16,6 @@ from .exceptions import (
     TrustCheckFailed,
 )
 
-__version__ = "0.1.1"
 __all__ = [
     "MolTrustGuardrail",
     "MolTrustCrewAIError",
