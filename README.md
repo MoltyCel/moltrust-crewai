@@ -39,7 +39,7 @@ That's it — the guardrail fires automatically on every tool call via
 
 ```python
 MolTrustGuardrail(
-    min_score=60,          # minimum acceptable MolTrust trust score
+    min_score=60,          # min trust score, 0-100 scale (see below)
     action="block",        # "block" | "warn" | "log" | "raise"
     agent_did_map={         # map a CrewAI agent role → its MolTrust DID
         "Researcher": "did:moltrust:0123456789abcdef",
@@ -52,9 +52,11 @@ MolTrustGuardrail(
 ## What it does
 
 Before every tool call, `MolTrustGuardrail` resolves the calling agent's
-MolTrust DID (via `agent_did_map` or a `did` in the tool input) and looks up its
-trust score in the MolTrust registry. The CrewAI hook contract is simple: the
-hook returns `False` to block the tool call, or `None`/`True` to allow it.
+MolTrust DID (via `agent_did_map` or a `did` in the tool input) and reads its
+trust score from `GET /skill/trust-score/{did}`. `min_score` is on the
+**MolTrust trust score scale (0–100, behavioral trust)** — **not** the 0–5
+reputation/rating scale. The CrewAI hook contract is simple: the hook returns
+`False` to block the tool call, or `None`/`True` to allow it.
 
 Trust scores are **recomputable** — you never have to take MolTrust's word for a
 number. Verify the on-chain solvency component of any agent independently:
@@ -76,11 +78,14 @@ to bound authority, use MolTrust to decide who has earned it.
 - CrewAI agents have no MolTrust DID by default — you map them explicitly via
   `agent_did_map`, or carry a `did` in the tool input. There is no magic
   auto-binding yet.
-- `min_score` is on the MolTrust reputation-score scale returned by the SDK's
-  `get_reputation(did)`. Set it to match your registry's scale.
+- `min_score` is on the **0–100 MolTrust trust score** (`trust_score` from
+  `/skill/trust-score/{did}`), the phase-2 behavioral score — not the 0–5
+  reputation/rating average.
+- A **withheld** score (registered agent with too few endorsements → API
+  returns `trust_score: null, withheld: true`) is treated like an unregistered
+  agent: fail-closed in `block`, fail-open in `warn`/`log`.
 - On a registry/transport error the guardrail **fails open** (allows the call,
-  logs a warning) so a MolTrust hiccup never breaks your crew. Unregistered
-  agents are treated as failing the check.
+  logs a warning) so a MolTrust hiccup never breaks your crew.
 - `before_llm_call` is a no-op placeholder (a hook point for injecting trust
   context into prompts); extend it as needed.
 

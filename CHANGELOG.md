@@ -18,6 +18,9 @@ Initial release. Skeleton + working code (not yet published to PyPI).
   - `install()` / `uninstall()` lifecycle + context-manager support.
   - Fails open on registry/transport errors; treats unregistered agents as
     failing the check.
-- `TrustClient` — thin wrapper over the `moltrust` SDK (`get_reputation`).
+- `TrustClient` — direct HTTP client for `GET /skill/trust-score/{did}` (the
+  0–100 behavioral `trust_score`; returns `None` when `withheld`/`null`).
+  Authenticated with `X-API-Key`. (Uses `requests`, not the `moltrust` SDK, so
+  it reads the 0–100 trust score rather than the SDK's 0–5 reputation average.)
 - Exceptions: `MolTrustCrewAIError`, `AgentNotRegistered`, `TrustCheckFailed`.
 - Mock-based test suite (no live API calls).

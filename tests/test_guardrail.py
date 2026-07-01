@@ -133,3 +133,85 @@ def test_resolve_did_custom_key():
 def test_invalid_action_rejected():
     with pytest.raises(ValueError):
         MolTrustGuardrail(action="nope")
+
+
+# -- withheld score (trust_score null / withheld=true) ---------------------
+
+def test_withheld_score_blocked_in_block_mode():
+    # get_trust_score returns None → treated as no verifiable score → block
+    g = _guard(score=None, min_score=60, action="block")
+    assert g.before_tool_call(FakeContext(tool_input={"did": DID})) is False
+
+
+def test_withheld_score_allowed_in_warn_mode():
+    g = _guard(score=None, min_score=60, action="warn")
+    assert g.before_tool_call(FakeContext(tool_input={"did": DID})) is None
+
+
+# -- TrustClient HTTP layer (mocked /skill/trust-score/{did}) --------------
+
+from unittest import mock  # noqa: E402
+import requests as _requests  # noqa: E402
+
+from moltrust_crewai.client import TrustClient  # noqa: E402
+
+
+class FakeResponse:
+    def __init__(self, status_code=200, payload=None):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else {}
+
+    def json(self):
+        return self._payload
+
+
+def _client():
+    return TrustClient(api_key="test-key")
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_returns_score_and_calls_skill_endpoint(mget):
+    mget.return_value = FakeResponse(200, {"trust_score": 75, "withheld": False})
+    assert _client().get_trust_score(DID) == 75.0
+    args, kwargs = mget.call_args
+    assert args[0].endswith(f"/skill/trust-score/{DID}")
+    assert kwargs["headers"]["X-API-Key"] == "test-key"
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_withheld_returns_none(mget):
+    mget.return_value = FakeResponse(200, {"trust_score": None, "withheld": True})
+    assert _client().get_trust_score(DID) is None
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_null_score_returns_none(mget):
+    mget.return_value = FakeResponse(200, {"trust_score": None, "withheld": False})
+    assert _client().get_trust_score(DID) is None
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_404_raises_not_registered(mget):
+    mget.return_value = FakeResponse(404, {})
+    with pytest.raises(AgentNotRegistered):
+        _client().get_trust_score(DID)
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_http_error_raises(mget):
+    mget.return_value = FakeResponse(500, {})
+    with pytest.raises(MolTrustCrewAIError):
+        _client().get_trust_score(DID)
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_network_error_raises(mget):
+    mget.side_effect = _requests.RequestException("boom")
+    with pytest.raises(MolTrustCrewAIError):
+        _client().get_trust_score(DID)
+
+
+def test_client_requires_api_key(monkeypatch):
+    monkeypatch.delenv("MOLTRUST_API_KEY", raising=False)
+    with pytest.raises(MolTrustCrewAIError):
+        TrustClient()

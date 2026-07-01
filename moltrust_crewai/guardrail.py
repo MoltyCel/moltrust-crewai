@@ -142,6 +142,13 @@ class MolTrustGuardrail:
             logger.warning("MolTrust: trust lookup failed for %s (%s); allowing", did, exc)
             return None
 
+        if score is None:
+            # Registered but score withheld / not yet computed. No verifiable
+            # score → same treatment as unregistered: fail-closed in "block",
+            # fail-open in "warn"/"log" (per action).
+            logger.warning("MolTrust: no trust score available for %s (withheld)", did)
+            return self._deny(did, None, context)
+
         if score < self.min_score:
             return self._deny(did, score, context)
 
