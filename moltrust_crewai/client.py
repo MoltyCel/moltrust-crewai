@@ -5,8 +5,9 @@ reads the agent's **0-100 behavioral trust score** from
 ``GET /skill/trust-score/{did}``. Scores are recomputable — the on-chain
 solvency component is independently verifiable at ``/credits/solvency/{did}``.
 
-No SDK wrapper: this is a direct ``requests`` call, authenticated with the
-``X-API-Key`` header (from ``MOLTRUST_API_KEY``).
+No SDK wrapper: a direct ``requests`` call. **Tier 1 (keyless)** works with no
+API key (rate-limited); **Tier 2** sends an ``X-API-Key`` header when an
+``api_key`` / ``MOLTRUST_API_KEY`` is provided (higher rate limits).
 """
 
 from __future__ import annotations
@@ -25,8 +26,8 @@ class TrustClient:
     """Fetch a DID's MolTrust trust score (0-100) via ``/skill/trust-score/{did}``.
 
     Args:
-        api_key: MolTrust API key. Falls back to the ``MOLTRUST_API_KEY``
-            environment variable.
+        api_key: Optional MolTrust API key (Tier 2). Falls back to the
+            ``MOLTRUST_API_KEY`` env var. If neither is set, runs keyless (Tier 1).
         base_url: API base URL (default ``https://api.moltrust.ch``).
         timeout: Per-request timeout in seconds.
     """
@@ -37,12 +38,8 @@ class TrustClient:
         base_url: Optional[str] = None,
         timeout: float = 15.0,
     ):
-        key = api_key or os.getenv("MOLTRUST_API_KEY")
-        if not key:
-            raise MolTrustCrewAIError(
-                "No MolTrust API key. Pass api_key=... or set MOLTRUST_API_KEY."
-            )
-        self._api_key = key
+        # Optional by design: None => keyless Tier-1 mode.
+        self._api_key = api_key or os.environ.get("MOLTRUST_API_KEY")
         self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self._timeout = timeout
 
@@ -59,10 +56,9 @@ class TrustClient:
             MolTrustCrewAIError: on any other HTTP / transport error.
         """
         url = f"{self._base_url}/skill/trust-score/{did}"
+        headers = {"X-API-Key": self._api_key} if self._api_key else {}
         try:
-            resp = requests.get(
-                url, headers={"X-API-Key": self._api_key}, timeout=self._timeout
-            )
+            resp = requests.get(url, headers=headers, timeout=self._timeout)
         except requests.RequestException as exc:
             raise MolTrustCrewAIError(f"MolTrust request failed for {did}: {exc}") from exc
 
