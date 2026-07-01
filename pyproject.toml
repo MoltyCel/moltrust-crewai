@@ -19,7 +19,7 @@ classifiers = [
   "Topic :: Security",
 ]
 dependencies = [
-  "moltrust>=0.2",
+  "requests>=2.28",
   "crewai>=1.0",
 ]
 
