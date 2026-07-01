@@ -9,6 +9,7 @@ description = "MolTrust trust verification middleware for CrewAI"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+license-files = []
 authors = [{ name = "Lars Kersten Kroehl", email = "kersten.kroehl@cryptokri.ch" }]
 keywords = ["crewai", "moltrust", "agent", "trust", "guardrail", "middleware", "ai-agents"]
 classifiers = [
