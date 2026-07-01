@@ -27,8 +27,29 @@ crew.kickoff()
 ```
 
 That's it — the guardrail fires automatically on every tool call via
-`crewai.hooks`. Set `MOLTRUST_API_KEY` in your environment (or pass
-`api_key=...`).
+`crewai.hooks`. No API key required to get started (see tiers below).
+
+## Usage Tiers
+
+**Tier 1 — No account required**
+
+```python
+pip install moltrust-crewai
+
+guard = MolTrustGuardrail(min_score=60)
+guard.install()
+# Reads trust scores without an API key. Rate-limited.
+```
+
+**Tier 2 — Free account**
+
+```python
+guard = MolTrustGuardrail(min_score=60, api_key="mt_...")
+# Higher rate limits + interaction feedback (score improvement over time)
+```
+
+The API key (arg or `MOLTRUST_API_KEY` env) is sent as the `X-API-Key` header
+only when present.
 
 > **Note on the API:** CrewAI 1.x wires middleware through its **hook system**
 > (`crewai.hooks`), not a `Crew(callbacks=[...])` argument. `install()`

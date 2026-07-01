@@ -211,7 +211,17 @@ def test_client_network_error_raises(mget):
         _client().get_trust_score(DID)
 
 
-def test_client_requires_api_key(monkeypatch):
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_keyless_tier1_sends_no_api_key(mget, monkeypatch):
+    # Tier 1: no key required, no X-API-Key header sent, no error raised.
     monkeypatch.delenv("MOLTRUST_API_KEY", raising=False)
-    with pytest.raises(MolTrustCrewAIError):
-        TrustClient()
+    mget.return_value = FakeResponse(200, {"trust_score": 70, "withheld": False})
+    assert TrustClient().get_trust_score(DID) == 70.0
+    assert "X-API-Key" not in mget.call_args.kwargs["headers"]
+
+
+@mock.patch("moltrust_crewai.client.requests.get")
+def test_client_tier2_sends_api_key_header(mget):
+    mget.return_value = FakeResponse(200, {"trust_score": 70, "withheld": False})
+    TrustClient(api_key="mt_test").get_trust_score(DID)
+    assert mget.call_args.kwargs["headers"]["X-API-Key"] == "mt_test"
