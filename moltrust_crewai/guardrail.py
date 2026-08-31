@@ -21,8 +21,10 @@ a ``before_tool_call`` hook receives a ``ToolCallHookContext`` and returns
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Callable, Dict, Optional
 
+from ._trust_cache import TrustScoreCache
 from .client import TrustClient
 from .exceptions import AgentNotRegistered, MolTrustCrewAIError, TrustCheckFailed
 
@@ -82,6 +84,9 @@ class MolTrustGuardrail:
         agent_did_map: Optional[Dict[str, str]] = None,
         did_key: str = "did",
         pass_without_did: bool = True,
+        fail_open: Optional[bool] = None,
+        cache_ttl: float = 60.0,
+        cache_stale_grace: float = 300.0,
     ):
         if action not in _VALID_ACTIONS:
             raise ValueError(f"action must be one of {_VALID_ACTIONS}, got {action!r}")
@@ -90,6 +95,10 @@ class MolTrustGuardrail:
         self.agent_did_map = dict(agent_did_map or {})
         self.did_key = did_key
         self.pass_without_did = pass_without_did
+        if fail_open is None:
+            fail_open = os.getenv("MOLTRUST_FAIL_OPEN", "").strip().lower() in {"1", "true", "yes"}
+        self.fail_open = fail_open
+        self._cache = TrustScoreCache(ttl=cache_ttl, stale_grace=cache_stale_grace)
         self._client = client  # lazily constructed on first use if None
         self._api_key = api_key
         self._registry: Optional[Dict[str, Callable[..., Any]]] = None
@@ -131,16 +140,33 @@ class MolTrustGuardrail:
         if not did:
             return None if self.pass_without_did else self._deny(None, None, context)
 
+        hit, cached = self._cache.get_fresh(did)
+        if hit:
+            return self._from_score(did, cached, context)
+
         try:
             score = self._get_client().get_trust_score(did)
         except AgentNotRegistered:
             logger.warning("MolTrust: agent %s is not registered", did)
             return self._deny(did, None, context)
         except MolTrustCrewAIError as exc:
-            # Fail open on transport errors — do not break the crew on a
-            # registry hiccup. Logged so it is never silent.
-            logger.warning("MolTrust: trust lookup failed for %s (%s); allowing", did, exc)
-            return None
+            hit, cached = self._cache.get_stale(did)
+            if hit:
+                logger.warning(
+                    "MolTrust: lookup failed for %s (%s); using cached score", did, exc
+                )
+                return self._from_score(did, cached, context)
+            if self.fail_open:
+                logger.warning(
+                    "MolTrust: lookup failed for %s (%s); allowing (fail_open)", did, exc
+                )
+                return None
+            logger.warning(
+                "MolTrust: lookup failed for %s (%s); blocking (fail_closed)", did, exc
+            )
+            return self._deny(did, None, context)
+
+        self._cache.put(did, score)
 
         if score is None:
             # Registered but score withheld / not yet computed. No verifiable
@@ -202,4 +228,12 @@ class MolTrustGuardrail:
             did = tool_input.get(self.did_key)
             if isinstance(did, str) and did:
                 return did
+        return None
+
+    def _from_score(self, did: str, score, context: Any):
+        """Apply the policy to a score that came from the cache."""
+        if score is None:
+            return self._deny(did, None, context)
+        if score < self.min_score:
+            return self._deny(did, score, context)
         return None
