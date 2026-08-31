@@ -107,9 +107,15 @@ def test_unregistered_agent_blocked_in_block_mode():
     assert g.before_tool_call(FakeContext(tool_input={"did": DID})) is False
 
 
-def test_transport_error_fails_open():
+def test_transport_error_fails_closed():
+    """0.2.0 (M7): a registry error denies unless the integration opts out."""
     g = _guard(raises=MolTrustCrewAIError("boom"), min_score=60, action="block")
-    # registry hiccup must not break the crew → allow (None)
+    assert g.before_tool_call(FakeContext(tool_input={"did": DID})) is False
+
+
+def test_transport_error_fails_open_when_opted_out():
+    g = _guard(raises=MolTrustCrewAIError("boom"), min_score=60, action="block",
+               fail_open=True)
     assert g.before_tool_call(FakeContext(tool_input={"did": DID})) is None
 
 
